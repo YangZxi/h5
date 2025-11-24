@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>时间差计算器</title>
+    <style>
+        :root {
+            color-scheme: light dark;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+            background: linear-gradient(145deg, #f5f7fa, #e4ebf5);
+            color: #202124;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 48px;
+        }
+
+        .controls {
+            position: fixed;
+            top: 24px;
+            right: 24px;
+            padding: 20px 24px;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.9);
+            box-shadow: 0 12px 40px rgba(31, 38, 135, 0.15);
+            backdrop-filter: blur(6px);
+            display: grid;
+            gap: 12px;
+            max-width: 280px;
+        }
+
+        .controls label {
+            display: grid;
+            gap: 4px;
+            font-size: 14px;
+            color: #5f6368;
+        }
+
+        .controls input {
+            border: 1px solid rgba(95, 99, 104, 0.3);
+            border-radius: 10px;
+            padding: 10px 12px;
+            font-size: 16px;
+        }
+
+        .controls button {
+            margin-top: 4px;
+            border: none;
+            border-radius: 999px;
+            padding: 12px 0;
+            font-size: 16px;
+            font-weight: 600;
+            color: #fff;
+            background: linear-gradient(135deg, #4285f4, #34a853);
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .controls button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 10px 24px rgba(52, 168, 83, 0.35);
+        }
+
+        .controls button:active {
+            transform: translateY(0);
+        }
+
+        .controls button.secondary {
+            background: linear-gradient(135deg, #fbbc05, #ea4335);
+            box-shadow: 0 10px 24px rgba(234, 67, 53, 0.28);
+        }
+
+        .controls button.secondary:hover {
+            box-shadow: 0 12px 28px rgba(234, 67, 53, 0.35);
+        }
+
+        #datetime {
+            text-align: center;
+            font-size: clamp(48px, 8vw, 96px);
+            font-weight: 700;
+            letter-spacing: 2px;
+            line-height: 1.2;
+            color: rgba(32, 33, 36, 0.9);
+            text-shadow: 0 8px 30px rgba(66, 133, 244, 0.2);
+        }
+
+        #datetime span {
+            display: block;
+            font-size: clamp(16px, 2.2vw, 28px);
+            font-weight: 400;
+            letter-spacing: 0.6px;
+            margin-top: 12px;
+            color: #5f6368;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 24px;
+            }
+
+            .controls {
+                position: static;
+                width: 100%;
+            }
+
+            .controls button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <label>
+            游戏剩余时间（mmss）
+            <input type="number" id="leftTime" min="1" max="9999" placeholder="例如 1030">
+        </label>
+        <label>
+            撤离点倒计时（mmss）
+            <input type="number" id="countDown" min="1" max="9999" placeholder="例如 310">
+        </label>
+        <label>
+            预留秒数
+            <input type="number" id="reserveSeconds" value="6" min="0" max="60" placeholder="默认 6s">
+        </label>
+        <div style="display: grid; gap: 10px;">
+            <button id="calcBtn">计算</button>
+            <button id="clearBtn" class="secondary">清空</button>
+        </div>
+    </div>
+    <div id="datetime">00:00<span>填写时间后点击计算</span></div>
+
+    <script>
+        const DEFAULT_RESERVE_SECONDS = 6;
+        const leftTimeInput = document.getElementById("leftTime");
+        const countDownInput = document.getElementById("countDown");
+        const reserveInput = document.getElementById("reserveSeconds");
+        const calcBtn = document.getElementById("calcBtn");
+        const clearBtn = document.getElementById("clearBtn");
+        const resultContainer = document.getElementById("datetime");
+
+        const parseTime = (rawValue) => {
+            if (!rawValue) {
+                return null;
+            }
+
+            const trimmed = String(rawValue).trim();
+            if (trimmed === "") {
+                return null;
+            }
+
+            const value = Number(trimmed);
+            if (!Number.isInteger(value) || value < 0) {
+                return NaN;
+            }
+
+            const minutes = Math.floor(value / 100);
+            const seconds = value % 100;
+
+            if (seconds >= 60) {
+                return NaN;
+            }
+
+            return minutes * 60 + seconds;
+        };
+
+        const formatTime = (totalSeconds) => {
+            const sign = totalSeconds < 0 ? "-" : "";
+            const absSeconds = Math.abs(totalSeconds);
+            const minutes = Math.floor(absSeconds / 60);
+            const seconds = absSeconds % 60;
+
+            return `${sign}${minutes < 10 ? "0" : ""}${minutes}:${seconds.toString().padStart(2, "0")}`;
+        };
+
+        const showMessage = (message, subtitle = "", isError = false) => {
+            resultContainer.innerHTML = `${message}${subtitle ? `<span>${subtitle}</span>` : ""}`;
+            resultContainer.style.color = isError ? "#d93025" : "rgba(32, 33, 36, 0.9)";
+            resultContainer.querySelectorAll("span").forEach((span) => {
+                span.style.color = isError ? "#d93025" : "#5f6368";
+            });
+        };
+
+        // computeAndShow: validate and display errors when inputs invalid
+        const computeAndShow = () => {
+            const leftSeconds = parseTime(leftTimeInput.value);
+            const countDownSeconds = parseTime(countDownInput.value);
+            const reserveSecondsRaw = Number(reserveInput.value || 6);
+            const reserveSeconds = Number.isFinite(reserveSecondsRaw) ? reserveSecondsRaw : NaN;
+
+            if (leftSeconds === null || countDownSeconds === null) {
+                showMessage("00:00", "需提供剩余时间、撤离倒计时与预留秒数", true);
+                return null;
+            }
+
+            if (Number.isNaN(leftSeconds) || Number.isNaN(countDownSeconds)) {
+                showMessage("00:00", "时间格式错误，请使用 mmss 形式，并确保秒小于 60。", true);
+                return null;
+            }
+
+            if (!Number.isFinite(reserveSeconds) || reserveSeconds < 0) {
+                showMessage("00:00", "预留秒数格式错误，请输入大于等于 0 的整数秒。", true);
+                return null;
+            }
+
+            const diffSeconds = leftSeconds - countDownSeconds + Math.round(reserveSeconds);
+            showMessage(`${formatTime(diffSeconds)}`, `已加入预留 ${Math.round(reserveSeconds)} 秒`);
+            return diffSeconds;
+        };
+
+        // computeQuietly: used by change listeners — only update when inputs are valid, otherwise show neutral hint
+        const computeQuietly = () => {
+            const leftSeconds = parseTime(leftTimeInput.value);
+            const countDownSeconds = parseTime(countDownInput.value);
+            const reserveSecondsRaw = Number(reserveInput.value || DEFAULT_RESERVE_SECONDS);
+            const reserveSeconds = Number.isFinite(reserveSecondsRaw) ? reserveSecondsRaw : NaN;
+
+            if (leftSeconds === null || countDownSeconds === null) {
+                showMessage("00:00", "填写时间后点击计算");
+                return null;
+            }
+
+            if (Number.isNaN(leftSeconds) || Number.isNaN(countDownSeconds)) {
+                showMessage("00:00", "请使用 mmss 形式，例如 1030 表示 10:30");
+                return null;
+            }
+
+            if (!Number.isFinite(reserveSeconds) || reserveSeconds < 0) {
+                showMessage("00:00", "填写时间后点击计算");
+                return null;
+            }
+
+            const diffSeconds = leftSeconds - countDownSeconds + Math.round(reserveSeconds);
+            showMessage(`${formatTime(diffSeconds)}`, `已加入预留 ${Math.round(reserveSeconds)} 秒`);
+            return diffSeconds;
+        };
+
+        // calculate on button click (show errors)
+        calcBtn.addEventListener("click", computeAndShow);
+
+        // on change: update silently (no red errors) when inputs are incomplete or invalid
+        [leftTimeInput, countDownInput, reserveInput].forEach((el) => {
+            el.addEventListener("change", computeQuietly);
+        });
+
+        clearBtn.addEventListener("click", () => {
+            leftTimeInput.value = "";
+            countDownInput.value = "";
+            reserveInput.value = "";
+            showMessage("00:00", "填写时间后点击计算");
+            leftTimeInput.focus();
+        });
+    </script>
+</body>
+</html>
